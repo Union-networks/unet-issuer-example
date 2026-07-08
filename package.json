@@ -1,0 +1,29 @@
+{
+  "name": "unet-issuer-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example issuer web app and miniapp for U-net attestations.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@union-networks/issuer": "https://registry.npmjs.org/@union-networks/issuer/-/issuer-0.2.0-alpha.7.tgz",
+    "@union-networks/react": "0.2.0-alpha.7",
+    "@union-networks/server": "0.2.0-alpha.7",
+    "@union-networks/web-login": "0.2.0-alpha.7",
+    "next": "^16.0.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.9.2"
+  }
+}
