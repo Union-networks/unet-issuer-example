@@ -17,7 +17,8 @@ export function LoginPanel({ onLogin }: Props) {
         if (cancelled) return;
         setQr(created.qrDataUrl || renderLoginQrPayload(created));
         setStatus('Scan with U-net to continue.');
-        const finalSession = await pollLoginSession(created.sessionId, { issuerBaseUrl: process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL });
+        const pollOptions = process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL ? { issuerBaseUrl: process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL } : undefined;
+        const finalSession = await pollLoginSession(created.sessionId, pollOptions);
         if (cancelled) return;
         if (finalSession.status !== 'approved' || !finalSession.scopedUserId || !finalSession.assertionJws) {
           setStatus(`Login ${finalSession.status}`);
