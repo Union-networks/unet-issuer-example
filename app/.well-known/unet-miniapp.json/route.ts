@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createIssuerMiniappManifest } from '@union-networks/issuer';
 import { appOrigin, providerName, serviceId, serviceName } from '@/lib/config';
+import { getProviderDomainClaim } from '@/lib/domain-claim';
 
 export function GET() {
   const origin = appOrigin.replace(/\/+$/, '');
-  const claimId = process.env.UNET_PROVIDER_CLAIM_ID;
-  const challenge = process.env.UNET_PROVIDER_CLAIM_CHALLENGE;
   const manifest = createIssuerMiniappManifest({
     serviceId,
     name: serviceName,
@@ -16,8 +15,7 @@ export function GET() {
     permissions: ['identity.scoped', 'attestations.request', 'attestations.refresh'],
     notificationCategories: ['service', 'security', 'marketing'],
   }) as unknown as Record<string, unknown>;
-  if (claimId && challenge) {
-    manifest.domainClaim = { serviceId, origin, claimId, challenge };
-  }
-  return NextResponse.json(manifest, { headers: { 'cache-control': 'public, max-age=300' } });
+  const domainClaim = getProviderDomainClaim();
+  if (domainClaim) manifest.domainClaim = domainClaim;
+  return NextResponse.json(manifest, { headers: { 'cache-control': 'no-store' } });
 }

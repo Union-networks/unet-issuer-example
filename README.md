@@ -22,7 +22,7 @@ The example identity is:
 ## Setup
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `NEXT_PUBLIC_UNET_ORIGIN` to your public deployment origin.
+2. Set `NEXT_PUBLIC_UNET_ORIGIN` or server-only `UNET_ORIGIN` to your public deployment origin. On Vercel, the example can also infer the origin from Vercel deployment URL env vars, but setting the canonical production origin is still recommended.
 3. In the U-net dashboard, verify that domain and copy the claim values into:
    `UNET_PROVIDER_CLAIM_ID`, `UNET_PROVIDER_CLAIM_CHALLENGE`, and
    `UNET_PROVIDER_CLAIM_TOKEN`.
