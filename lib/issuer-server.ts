@@ -4,6 +4,7 @@ import { issuerBaseUrl, serviceId } from './config';
 
 export const providerToken = () => process.env.UNET_PROVIDER_API_KEY;
 export const issuerOptions = () => ({ issuerBaseUrl });
+const normalizePem = (value: string) => value.trim().replace(/^"|"$/g, '').replace(/\\n/g, '\n');
 export const issuerSigner = (requestType?: string) => {
   const raw = process.env.UNET_ISSUER_SIGNERS_JSON;
   if (raw && requestType) {
@@ -13,12 +14,17 @@ export const issuerSigner = (requestType?: string) => {
       return {
         issuerId: signer.issuerId,
         keyId: signer.keyId,
-        privateKeyPem: signer.privateKeyPem,
-        ...(signer.publicKeyPem ? { publicKeyPem: signer.publicKeyPem } : {}),
+        privateKeyPem: normalizePem(signer.privateKeyPem),
+        ...(signer.publicKeyPem ? { publicKeyPem: normalizePem(signer.publicKeyPem) } : {}),
       };
     }
   }
-  return createIssuerSignerFromEnv();
+  const signer = createIssuerSignerFromEnv();
+  return {
+    ...signer,
+    privateKeyPem: normalizePem(signer.privateKeyPem),
+    ...(signer.publicKeyPem ? { publicKeyPem: normalizePem(signer.publicKeyPem) } : {}),
+  };
 };
 
 export function verifyServiceAssertion(assertionJws?: string) {

@@ -35,14 +35,18 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
 
   async function decide(requestId: string, decision: 'approve' | 'deny') {
     setStatus(`${decision}...`);
-    const response = await fetch(`/api/issuer/requests/${encodeURIComponent(requestId)}/decision`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${assertionJws}` },
-      body: JSON.stringify({ decision, reason: decision === 'deny' ? 'Denied by issuer' : undefined }),
-    });
-    const payload = await response.json();
-    setStatus(response.ok ? 'Updated.' : (payload.message || 'Decision failed'));
-    await load();
+    try {
+      const response = await fetch(`/api/issuer/requests/${encodeURIComponent(requestId)}/decision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${assertionJws}` },
+        body: JSON.stringify({ decision, reason: decision === 'deny' ? 'Denied by issuer' : undefined }),
+      });
+      const payload = await response.json().catch(() => ({ success: false, message: 'Decision failed without a JSON response.' }));
+      setStatus(response.ok ? 'Updated.' : (payload.message || 'Decision failed'));
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Decision failed');
+    }
   }
 
   async function revoke(attestationHash: string) {
@@ -52,7 +56,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
       headers: { 'content-type': 'application/json', authorization: `Bearer ${assertionJws}` },
       body: JSON.stringify({ reason: 'Revoked from issuer example dashboard' }),
     });
-    const payload = await response.json();
+    const payload = await response.json().catch(() => ({ success: false, message: 'Revoke failed without a JSON response.' }));
     setStatus(response.ok ? 'Revoked.' : (payload.message || 'Revoke failed'));
     await load();
   }
