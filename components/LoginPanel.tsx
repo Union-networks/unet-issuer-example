@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { pollLoginSession, renderLoginQrPayload } from '@union-networks/web-login';
+import { renderLoginQrPayload } from '@union-networks/web-login';
 
 type Props = { onLogin: (scopedUserId: string, assertionJws: string) => void };
 
@@ -11,14 +11,25 @@ export function LoginPanel({ onLogin }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sleep = (ms: number) => new Promise((resolve) => { timer = setTimeout(resolve, ms); });
     async function run() {
       try {
-        const created = await fetch('/api/login/session', { method: 'POST' }).then((res) => res.json());
+        const createdResponse = await fetch('/api/login/session', { method: 'POST' });
+        const created = await createdResponse.json().catch(() => ({ success: false, message: 'Could not create login session.' }));
+        if (!createdResponse.ok || created.success === false) throw new Error(created.message || 'Could not create login session.');
         if (cancelled) return;
         setQr(created.qrDataUrl || renderLoginQrPayload(created));
         setStatus('Scan with U-net to continue.');
-        const pollOptions = process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL ? { issuerBaseUrl: process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL } : undefined;
-        const finalSession = await pollLoginSession(created.sessionId, pollOptions);
+        let finalSession = created;
+        const deadline = Date.now() + 120000;
+        while (!cancelled && finalSession.status === 'pending' && Date.now() < deadline) {
+          await sleep(1500);
+          if (cancelled) return;
+          const pollResponse = await fetch(`/api/login/session?sessionId=${encodeURIComponent(created.sessionId)}`, { cache: 'no-store' });
+          finalSession = await pollResponse.json().catch(() => ({ success: false, message: 'Could not read login session.' }));
+          if (!pollResponse.ok || finalSession.success === false) throw new Error(finalSession.message || 'Could not poll login session.');
+        }
         if (cancelled) return;
         if (finalSession.status !== 'approved' || !finalSession.scopedUserId || !finalSession.assertionJws) {
           setStatus(`Login ${finalSession.status}`);
@@ -34,7 +45,10 @@ export function LoginPanel({ onLogin }: Props) {
       }
     }
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [onLogin]);
 
   return (
