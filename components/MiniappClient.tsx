@@ -67,10 +67,17 @@ export function MiniappClient() {
     setStatus('Connected with a service-scoped U-net ID.');
   }, []);
 
+  const clearStoredSession = useCallback(() => {
+    localStorage.removeItem('unetIssuerExampleScopedUserId');
+    localStorage.removeItem('unetIssuerExampleAssertion');
+    setScopedUserId('');
+    setAssertionJws('');
+  }, []);
+
   const requestFromHost = useCallback(async () => {
     if (!window.ReactNativeWebView) {
       setStatus('Open in U-net or sign in below.');
-      return;
+      return undefined;
     }
     try {
       setStatus('Asking U-net for a scoped service session...');
@@ -80,8 +87,10 @@ export function MiniappClient() {
       if (!scoped) throw new Error('U-net host returned no scoped user ID.');
       if (!assertion) throw new Error('U-net host returned no login assertion.');
       await completeLogin(scoped, assertion, { verify: false });
+      return { scopedUserId: scoped, assertionJws: assertion };
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'U-net miniapp login failed.');
+      return undefined;
     }
   }, [callHost, completeLogin]);
 
@@ -141,17 +150,37 @@ export function MiniappClient() {
   }, [assertionJws, bridgeChecked, isMiniapp, requestFromHost, scopedUserId]);
 
   async function submitRequest() {
-    if (!scopedUserId || !assertionJws) {
+    let nextScopedUserId = scopedUserId;
+    let nextAssertionJws = assertionJws;
+    if (isMiniapp && window.ReactNativeWebView) {
+      const refreshed = await requestFromHost();
+      if (refreshed?.scopedUserId && refreshed.assertionJws) {
+        nextScopedUserId = refreshed.scopedUserId;
+        nextAssertionJws = refreshed.assertionJws;
+      }
+    }
+    if (!nextScopedUserId || !nextAssertionJws) {
       setStatus('Sign in first.');
       return;
     }
     setStatus('Creating attestation request...');
-    const response = await fetch('/api/issuer/requests', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scopedUserId, assertionJws, requestType, claims: { requestedFrom: 'issuer-example-miniapp' } }),
-    });
-    const payload = await response.json();
+    const createRequest = async (scoped: string, assertion: string) => {
+      const response = await fetch('/api/issuer/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scopedUserId: scoped, assertionJws: assertion, requestType, claims: { requestedFrom: 'issuer-example-miniapp' } }),
+      });
+      const payload = await response.json().catch(() => ({ success: false, message: 'Could not read request response.' }));
+      return { response, payload };
+    };
+    let { response, payload } = await createRequest(nextScopedUserId, nextAssertionJws);
+    if (!response.ok && payload?.message === 'login_assertion_expired' && isMiniapp && window.ReactNativeWebView) {
+      clearStoredSession();
+      const refreshed = await requestFromHost();
+      if (refreshed?.scopedUserId && refreshed.assertionJws) {
+        ({ response, payload } = await createRequest(refreshed.scopedUserId, refreshed.assertionJws));
+      }
+    }
     setStatus(response.ok ? `Request created: ${payload.request.requestId}` : (payload.message || 'request failed'));
   }
 
