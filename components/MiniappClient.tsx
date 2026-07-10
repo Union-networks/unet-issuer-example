@@ -103,8 +103,17 @@ export function MiniappClient() {
   }, []);
 
   useEffect(() => {
-    setScopedUserId(localStorage.getItem('unetIssuerExampleScopedUserId') || '');
-    setAssertionJws(localStorage.getItem('unetIssuerExampleAssertion') || '');
+    const storedScopedUserId = localStorage.getItem('unetIssuerExampleScopedUserId') || '';
+    const storedAssertionJws = localStorage.getItem('unetIssuerExampleAssertion') || '';
+    if (storedScopedUserId && storedAssertionJws) {
+      setScopedUserId(storedScopedUserId);
+      setAssertionJws(storedAssertionJws);
+    } else {
+      localStorage.removeItem('unetIssuerExampleScopedUserId');
+      localStorage.removeItem('unetIssuerExampleAssertion');
+      setScopedUserId('');
+      setAssertionJws('');
+    }
     void fetch('/api/verification-checks')
       .then((res) => res.json())
       .then((body) => {
@@ -116,9 +125,9 @@ export function MiniappClient() {
   }, []);
 
   useEffect(() => {
-    if (scopedUserId) return;
+    if (scopedUserId && assertionJws) return;
     void requestFromHost();
-  }, [requestFromHost, scopedUserId]);
+  }, [assertionJws, requestFromHost, scopedUserId]);
 
   async function submitRequest() {
     if (!scopedUserId || !assertionJws) {
@@ -143,7 +152,7 @@ export function MiniappClient() {
         <p>Request attestations from the demo issuer using a scoped U-net identity.</p>
         <div className="code">{scopedUserId || 'No scoped identity yet'}</div>
       </div>
-      {!scopedUserId && <LoginPanel onLogin={(scoped) => { setScopedUserId(scoped); setStatus('Connected with browser U-net login.'); }} />}
+      {(!scopedUserId || !assertionJws) && <LoginPanel onLogin={(scoped, assertion) => { setScopedUserId(scoped); setAssertionJws(assertion); setStatus('Connected with browser U-net login.'); }} />}
       <div className="panel stack">
         <h2>Request an attestation</h2>
         <select value={requestType} onChange={(event) => setRequestType(event.target.value)}>
