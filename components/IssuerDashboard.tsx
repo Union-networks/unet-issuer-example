@@ -8,30 +8,36 @@ type AttestationItem = { attestationHash: string; requestType?: string; status: 
 
 export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'attestations' }) {
   const [scopedUserId, setScopedUserId] = useState('');
+  const [assertionJws, setAssertionJws] = useState('');
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [attestations, setAttestations] = useState<AttestationItem[]>([]);
   const [status, setStatus] = useState('');
 
   useEffect(() => {
     setScopedUserId(localStorage.getItem('unetIssuerExampleScopedUserId') || '');
+    setAssertionJws(localStorage.getItem('unetIssuerExampleAssertion') || '');
   }, []);
 
   const load = useCallback(async () => {
+    if (!assertionJws) return;
+    const headers = { authorization: `Bearer ${assertionJws}` };
     const [req, att] = await Promise.all([
-      fetch('/api/issuer/requests?status=pending').then((res) => res.json()),
-      fetch('/api/issuer/attestations').then((res) => res.json()),
+      fetch('/api/issuer/requests?status=pending', { headers }).then((res) => res.json()),
+      fetch('/api/issuer/attestations', { headers }).then((res) => res.json()),
     ]);
+    if (req.success === false) setStatus(req.message || 'Could not load requests.');
+    if (att.success === false) setStatus(att.message || 'Could not load attestations.');
     setRequests(req.requests ?? []);
     setAttestations(att.attestations ?? []);
-  }, []);
+  }, [assertionJws]);
 
-  useEffect(() => { if (scopedUserId) void load(); }, [scopedUserId, load]);
+  useEffect(() => { if (scopedUserId && assertionJws) void load(); }, [scopedUserId, assertionJws, load]);
 
   async function decide(requestId: string, decision: 'approve' | 'deny') {
     setStatus(`${decision}...`);
     const response = await fetch(`/api/issuer/requests/${encodeURIComponent(requestId)}/decision`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${assertionJws}` },
       body: JSON.stringify({ decision, reason: decision === 'deny' ? 'Denied by issuer' : undefined }),
     });
     const payload = await response.json();
@@ -43,7 +49,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
     setStatus('Revoking...');
     const response = await fetch(`/api/issuer/attestations/${encodeURIComponent(attestationHash)}/revoke`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${assertionJws}` },
       body: JSON.stringify({ reason: 'Revoked from issuer example dashboard' }),
     });
     const payload = await response.json();
@@ -51,7 +57,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
     await load();
   }
 
-  if (!scopedUserId) return <LoginPanel onLogin={(scoped) => setScopedUserId(scoped)} />;
+  if (!scopedUserId || !assertionJws) return <LoginPanel onLogin={(scoped, assertion) => { setScopedUserId(scoped); setAssertionJws(assertion); }} />;
 
   return (
     <div className="stack">
