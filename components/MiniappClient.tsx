@@ -16,6 +16,9 @@ type VerificationCheck = { requestType: string; label?: string; description?: st
 export function MiniappClient() {
   const [scopedUserId, setScopedUserId] = useState('');
   const [assertionJws, setAssertionJws] = useState('');
+  const [isMiniapp, setIsMiniapp] = useState(false);
+  const [bridgeChecked, setBridgeChecked] = useState(false);
+  const [showBrowserLogin, setShowBrowserLogin] = useState(false);
   const [status, setStatus] = useState('Connecting to U-net...');
   const [requestType, setRequestType] = useState('age-over-18');
   const [checks, setChecks] = useState<VerificationCheck[]>([]);
@@ -41,19 +44,22 @@ export function MiniappClient() {
       const id = `issuer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const timeout = setTimeout(() => {
         pending.current.delete(id);
-        reject(new Error('U-net host did not respond.'));
-      }, 15000);
+        reject(new Error('U-net bridge timed out.'));
+      }, 30000);
       pending.current.set(id, { resolve, reject, timeout });
       window.ReactNativeWebView.postMessage(JSON.stringify({ id, action, payload }));
     }), []);
 
-  const completeLogin = useCallback(async (scoped: string, assertion: string) => {
-    const verified = await fetch('/api/login/verify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ assertionJws: assertion }),
-    }).then((res) => res.json());
-    if (!verified.success) throw new Error(verified.message || 'login verification failed');
+  const completeLogin = useCallback(async (scoped: string, assertion: string, options: { verify?: boolean } = {}) => {
+    if (options.verify !== false) {
+      const response = await fetch('/api/login/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assertionJws: assertion }),
+      });
+      const verified = await response.json().catch(() => ({ success: false, message: 'Could not read login verification response.' }));
+      if (!response.ok || !verified.success) throw new Error(verified.message || 'login verification failed');
+    }
     localStorage.setItem('unetIssuerExampleScopedUserId', scoped);
     localStorage.setItem('unetIssuerExampleAssertion', assertion);
     setScopedUserId(scoped);
@@ -67,11 +73,13 @@ export function MiniappClient() {
       return;
     }
     try {
+      setStatus('Asking U-net for a scoped service session...');
       const result = await callHost('host.createServiceSession');
       const scoped = result?.scopedUserId;
       const assertion = result?.assertionJws;
-      if (!scoped || !assertion) throw new Error('Host did not return a scoped U-net session.');
-      await completeLogin(scoped, assertion);
+      if (!scoped) throw new Error('U-net host returned no scoped user ID.');
+      if (!assertion) throw new Error('U-net host returned no login assertion.');
+      await completeLogin(scoped, assertion, { verify: false });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'U-net miniapp login failed.');
     }
@@ -103,6 +111,8 @@ export function MiniappClient() {
   }, []);
 
   useEffect(() => {
+    setIsMiniapp(Boolean(window.ReactNativeWebView));
+    setBridgeChecked(true);
     const storedScopedUserId = localStorage.getItem('unetIssuerExampleScopedUserId') || '';
     const storedAssertionJws = localStorage.getItem('unetIssuerExampleAssertion') || '';
     if (storedScopedUserId && storedAssertionJws) {
@@ -121,13 +131,14 @@ export function MiniappClient() {
         setChecks(next);
         if (next[0]?.requestType) setRequestType(next[0].requestType);
       })
-      .catch((error) => setStatus(error instanceof Error ? error.message : 'Could not load active checks.'));
+      .catch((error) => setStatus(error instanceof Error ? `Could not load active checks: ${error.message}` : 'Could not load active checks.'));
   }, []);
 
   useEffect(() => {
+    if (!bridgeChecked || !isMiniapp) return;
     if (scopedUserId && assertionJws) return;
     void requestFromHost();
-  }, [assertionJws, requestFromHost, scopedUserId]);
+  }, [assertionJws, bridgeChecked, isMiniapp, requestFromHost, scopedUserId]);
 
   async function submitRequest() {
     if (!scopedUserId || !assertionJws) {
@@ -152,7 +163,15 @@ export function MiniappClient() {
         <p>Request attestations from the demo issuer using a scoped U-net identity.</p>
         <div className="code">{scopedUserId || 'No scoped identity yet'}</div>
       </div>
-      {(!scopedUserId || !assertionJws) && <LoginPanel onLogin={(scoped, assertion) => { setScopedUserId(scoped); setAssertionJws(assertion); setStatus('Connected with browser U-net login.'); }} />}
+      {(!scopedUserId || !assertionJws) && isMiniapp && !showBrowserLogin ? (
+        <div className="panel stack">
+          <h2>Connecting through U-net</h2>
+          <p>{status}</p>
+          <button onClick={() => void requestFromHost()}>Retry U-net bridge</button>
+          <button onClick={() => setShowBrowserLogin(true)}>Use QR login instead</button>
+        </div>
+      ) : null}
+      {(!scopedUserId || !assertionJws) && bridgeChecked && (!isMiniapp || showBrowserLogin) && <LoginPanel onLogin={(scoped, assertion) => { setScopedUserId(scoped); setAssertionJws(assertion); setStatus('Connected with browser U-net login.'); }} />}
       <div className="panel stack">
         <h2>Request an attestation</h2>
         <select value={requestType} onChange={(event) => setRequestType(event.target.value)}>
