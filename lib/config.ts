@@ -1,5 +1,6 @@
 export const serviceId = process.env.NEXT_PUBLIC_UNET_SERVICE_ID ?? 'unet-issuer-example';
 export const issuerBaseUrl = process.env.NEXT_PUBLIC_UNET_ISSUER_BASE_URL ?? 'https://issuer.egress.live';
+export const verifierBaseUrl = process.env.NEXT_PUBLIC_UNET_VERIFIER_BASE_URL ?? 'https://verifier.egress.live';
 
 function resolveAppOrigin() {
   const explicit = process.env.NEXT_PUBLIC_UNET_ORIGIN ?? process.env.UNET_ORIGIN;

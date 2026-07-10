@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 
-import { allowedIssuerRequestTypes, issuerBaseUrl } from '@/lib/config';
+import { allowedIssuerRequestTypes, verifierBaseUrl } from '@/lib/config';
 
 export async function GET() {
-  const response = await fetch(`${issuerBaseUrl.replace(/\/+$/, '')}/v1/verification-checks`, { cache: 'no-store' });
+  const response = await fetch(`${verifierBaseUrl.replace(/\/+$/, '')}/v1/verification-checks`, { cache: 'no-store' });
   const body = await response.json().catch(() => ({ success: false, checks: [] }));
   if (!response.ok) return NextResponse.json(body, { status: response.status });
   const allowed = new Set(allowedIssuerRequestTypes);
