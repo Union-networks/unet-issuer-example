@@ -18,7 +18,14 @@ function resolveAppOrigin() {
 export const appOrigin = resolveAppOrigin();
 export const serviceName = 'U-net Issuer Example';
 export const providerName = 'Example Issuer';
-export const allowedIssuerRequestTypes = (process.env.UNET_ISSUER_ALLOWED_REQUEST_TYPES ?? 'over-18-yr')
-  .split(',')
-  .map((item) => item.trim())
-  .filter(Boolean);
+const defaultIssuerRequestTypes = ['over-18-yr'];
+
+export const allowedIssuerRequestTypes = Array.from(
+  new Set([
+    ...defaultIssuerRequestTypes,
+    ...(process.env.UNET_ISSUER_ALLOWED_REQUEST_TYPES ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ]),
+);
