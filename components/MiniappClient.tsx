@@ -20,7 +20,7 @@ export function MiniappClient() {
   const [bridgeChecked, setBridgeChecked] = useState(false);
   const [showBrowserLogin, setShowBrowserLogin] = useState(false);
   const [status, setStatus] = useState('Connecting to U-net...');
-  const [requestType, setRequestType] = useState('age-over-18');
+  const [requestType, setRequestType] = useState('over-18-yr');
   const [checks, setChecks] = useState<VerificationCheck[]>([]);
   const pending = useRef(new Map<string, { resolve: (value: HostMessage['result']) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>());
 
