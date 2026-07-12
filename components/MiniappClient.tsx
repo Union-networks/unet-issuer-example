@@ -21,7 +21,7 @@ export function MiniappClient() {
   const [bridgeChecked, setBridgeChecked] = useState(false);
   const [showBrowserLogin, setShowBrowserLogin] = useState(false);
   const [status, setStatus] = useState('Connecting to U-net...');
-  const [requestType, setRequestType] = useState('over-18-yr');
+  const [requestType, setRequestType] = useState('');
   const [checks, setChecks] = useState<VerificationCheck[]>([]);
   const [credentialRequestContext, setCredentialRequestContext] = useState<CredentialRequestContext>();
   const pending = useRef(new Map<string, { resolve: (value: HostMessage['result']) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>());
@@ -168,6 +168,10 @@ export function MiniappClient() {
       }
     }
     const requestContext = nextRequestContext;
+    if (!requestType || !checks.some((check) => check.requestType === requestType)) {
+      setStatus('Choose an active attestation type before creating a request.');
+      return;
+    }
     if (!nextScopedUserId || !nextAssertionJws || !requestContext) {
       setStatus(isMiniapp ? 'Reconnect to U-net to prepare private credential delivery.' : 'Attestation requests must currently be opened inside the U-net app.');
       return;
