@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { approveAttestationRequest, denyAttestationRequest, listAttestationRequests } from '@union-networks/issuer';
 import { issuerOptions, issuerSigner, providerToken, requireIssuerAdmin } from '@/lib/issuer-server';
-import { serviceId } from '@/lib/config';
+import { serviceId, verifierBaseUrl } from '@/lib/config';
 
 export async function POST(request: Request, { params }: { params: Promise<{ requestId: string }> }) {
   try {
@@ -19,9 +19,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ req
     const item = listed.requests.find((entry) => entry.requestId === requestId);
     if (!item) return NextResponse.json({ success: false, message: 'request not found' }, { status: 404 });
     const signer = issuerSigner(String(item.requestType));
-    const checksResponse = await fetch(`${issuerOptions().issuerBaseUrl}/v1/verification-checks`, { cache: 'no-store' });
+    const checksResponse = await fetch(`${verifierBaseUrl.replace(/\/+$/, '')}/v1/verification-checks`, { cache: 'no-store' });
     const checksPayload = await checksResponse.json() as { checks?: Array<{ requestType?: string; schemaId?: string; proofProfileId?: string; predicateParams?: Record<string, unknown> }> };
-    const check = checksPayload.checks?.find((entry) => entry.requestType === item.requestType);
+    const check = checksPayload.checks?.find((entry) =>
+      entry.requestType === item.requestType && entry.schemaId?.startsWith(`unet.${serviceId}.`));
     if (body.decision === 'approve' && (!check?.schemaId || !item.holderBinding || !item.deliveryPublicKey)) {
       return NextResponse.json({ success: false, message: 'Active check metadata or private credential delivery context is missing.' }, { status: 409 });
     }
