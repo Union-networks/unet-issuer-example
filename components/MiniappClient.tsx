@@ -10,7 +10,8 @@ declare global {
   }
 }
 
-type HostMessage = { id?: string; source?: string; ok?: boolean; result?: { scopedUserId?: string; assertionJws?: string }; error?: string };
+type CredentialRequestContext = { holderBinding: string; deliveryPublicKey: string };
+type HostMessage = { id?: string; source?: string; ok?: boolean; result?: { scopedUserId?: string; assertionJws?: string; credentialRequestContext?: CredentialRequestContext }; error?: string };
 type VerificationCheck = { requestType: string; label?: string; description?: string };
 
 export function MiniappClient() {
@@ -22,6 +23,7 @@ export function MiniappClient() {
   const [status, setStatus] = useState('Connecting to U-net...');
   const [requestType, setRequestType] = useState('over-18-yr');
   const [checks, setChecks] = useState<VerificationCheck[]>([]);
+  const [credentialRequestContext, setCredentialRequestContext] = useState<CredentialRequestContext>();
   const pending = useRef(new Map<string, { resolve: (value: HostMessage['result']) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>());
 
   const parseHostMessage = (data: unknown): HostMessage | null => {
@@ -86,8 +88,12 @@ export function MiniappClient() {
       const assertion = result?.assertionJws;
       if (!scoped) throw new Error('U-net host returned no scoped user ID.');
       if (!assertion) throw new Error('U-net host returned no login assertion.');
+      if (!result?.credentialRequestContext?.holderBinding || !result.credentialRequestContext.deliveryPublicKey) {
+        throw new Error('This U-net app version does not support private credential delivery yet.');
+      }
+      setCredentialRequestContext(result.credentialRequestContext);
       await completeLogin(scoped, assertion, { verify: false });
-      return { scopedUserId: scoped, assertionJws: assertion };
+      return { scopedUserId: scoped, assertionJws: assertion, credentialRequestContext: result.credentialRequestContext };
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'U-net miniapp login failed.');
       return undefined;
@@ -152,15 +158,18 @@ export function MiniappClient() {
   async function submitRequest() {
     let nextScopedUserId = scopedUserId;
     let nextAssertionJws = assertionJws;
+    let nextRequestContext = credentialRequestContext;
     if (isMiniapp && window.ReactNativeWebView) {
       const refreshed = await requestFromHost();
       if (refreshed?.scopedUserId && refreshed.assertionJws) {
         nextScopedUserId = refreshed.scopedUserId;
         nextAssertionJws = refreshed.assertionJws;
+        nextRequestContext = refreshed.credentialRequestContext;
       }
     }
-    if (!nextScopedUserId || !nextAssertionJws) {
-      setStatus('Sign in first.');
+    const requestContext = nextRequestContext;
+    if (!nextScopedUserId || !nextAssertionJws || !requestContext) {
+      setStatus(isMiniapp ? 'Reconnect to U-net to prepare private credential delivery.' : 'Attestation requests must currently be opened inside the U-net app.');
       return;
     }
     setStatus('Creating attestation request...');
@@ -168,7 +177,7 @@ export function MiniappClient() {
       const response = await fetch('/api/issuer/requests', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ scopedUserId: scoped, assertionJws: assertion, requestType, claims: { requestedFrom: 'issuer-example-miniapp' } }),
+        body: JSON.stringify({ scopedUserId: scoped, assertionJws: assertion, requestType, holderBinding: requestContext.holderBinding, deliveryPublicKey: requestContext.deliveryPublicKey, claims: { requestedFrom: 'issuer-example-miniapp' } }),
       });
       const payload = await response.json().catch(() => ({ success: false, message: 'Could not read request response.' }));
       return { response, payload };

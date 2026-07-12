@@ -57,10 +57,41 @@ const normalizePublicKeyPem = (value: string) => {
     return decodeEnvString(value);
   }
 };
+const normalizeCredentialPrivateKeyPem = (value: string) => {
+  const pem = normalizePemText(value, 'PRIVATE KEY');
+  try {
+    const key = createPrivateKey(pem);
+    if (key.asymmetricKeyType !== 'ec') throw new Error(`credential_private_key_must_be_secp256k1:${key.asymmetricKeyType ?? 'unknown'}`);
+    if (key.asymmetricKeyDetails?.namedCurve !== 'secp256k1') throw new Error(`credential_private_key_must_be_secp256k1:${key.asymmetricKeyDetails?.namedCurve ?? 'unknown'}`);
+    return key.export({ type: 'pkcs8', format: 'pem' }).toString();
+  } catch (pemError) {
+    const clean = decodeEnvString(value).replace(/[^A-Za-z0-9+/=]/g, '');
+    try {
+      const key = createPrivateKey({ key: Buffer.from(clean, 'base64'), format: 'der', type: 'pkcs8' });
+      if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'secp256k1') {
+        throw new Error(`credential_private_key_must_be_secp256k1:${key.asymmetricKeyType ?? key.asymmetricKeyDetails?.namedCurve ?? 'unknown'}`);
+      }
+      return key.export({ type: 'pkcs8', format: 'pem' }).toString();
+    } catch {
+      if (pemError instanceof Error && pemError.message.startsWith('credential_private_key_must_be_secp256k1')) throw pemError;
+      throw new Error('credential_private_key_invalid');
+    }
+  }
+};
+type IssuerSignerJson = {
+  issuerId?: string;
+  keyId?: string;
+  privateKeyPem?: string;
+  publicKeyPem?: string;
+  credentialKeyId?: string;
+  credentialPrivateKeyPem?: string;
+  credentialPublicKeyPem?: string;
+  credentialSignatureScheme?: 'ecdsa_secp256k1_compact_low_s';
+};
 export const issuerSigner = (requestType?: string) => {
   const raw = process.env.UNET_ISSUER_SIGNERS_JSON;
   if (raw && requestType) {
-    const parsed = JSON.parse(raw) as Record<string, { issuerId?: string; keyId?: string; privateKeyPem?: string; publicKeyPem?: string }>;
+    const parsed = JSON.parse(raw) as Record<string, IssuerSignerJson>;
     const signer = parsed[requestType];
     if (signer?.issuerId && signer.keyId && signer.privateKeyPem) {
       return {
@@ -68,6 +99,10 @@ export const issuerSigner = (requestType?: string) => {
         keyId: signer.keyId,
         privateKeyPem: normalizePrivateKeyPem(signer.privateKeyPem),
         ...(signer.publicKeyPem ? { publicKeyPem: normalizePublicKeyPem(signer.publicKeyPem) } : {}),
+        ...(signer.credentialKeyId ? { credentialKeyId: signer.credentialKeyId } : {}),
+        ...(signer.credentialPrivateKeyPem ? { credentialPrivateKeyPem: normalizeCredentialPrivateKeyPem(signer.credentialPrivateKeyPem) } : {}),
+        ...(signer.credentialPublicKeyPem ? { credentialPublicKeyPem: normalizePublicKeyPem(signer.credentialPublicKeyPem) } : {}),
+        ...(signer.credentialSignatureScheme ? { credentialSignatureScheme: signer.credentialSignatureScheme } : {}),
       };
     }
   }

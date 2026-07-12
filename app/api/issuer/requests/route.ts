@@ -20,14 +20,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { scopedUserId?: string; requestType?: string; claims?: Record<string, unknown>; assertionJws?: string };
-  if (!body.scopedUserId || !body.requestType) return NextResponse.json({ success: false, message: 'scopedUserId and requestType are required' }, { status: 400 });
+  const body = await request.json() as { scopedUserId?: string; requestType?: string; claims?: Record<string, unknown>; assertionJws?: string; holderBinding?: string; deliveryPublicKey?: string };
+  if (!body.scopedUserId || !body.requestType || !body.holderBinding || !body.deliveryPublicKey) return NextResponse.json({ success: false, message: 'scopedUserId, requestType, holderBinding and deliveryPublicKey are required' }, { status: 400 });
   try {
     const claims = verifyServiceAssertion(body.assertionJws);
     if (claims.scopedUserId !== body.scopedUserId) return NextResponse.json({ success: false, message: 'scoped user mismatch' }, { status: 403 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'invalid U-net assertion' }, { status: 401 });
   }
-  const result = await createAttestationRequest({ serviceId, scopedUserId: body.scopedUserId, requestType: body.requestType, claims: body.claims }, issuerOptions());
+  const result = await createAttestationRequest({ serviceId, scopedUserId: body.scopedUserId, requestType: body.requestType, claims: body.claims, holderBinding: body.holderBinding, deliveryPublicKey: body.deliveryPublicKey }, issuerOptions());
   return NextResponse.json(result);
 }
