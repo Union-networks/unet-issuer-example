@@ -7,7 +7,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ req
   try {
     requireIssuerAdmin(request);
   } catch (error) {
-    return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'issuer admin auth required' }, { status: 401 });
+    return NextResponse.json({
+      success: false,
+      errorCode: 'issuer_admin_session_required',
+      message: error instanceof Error ? error.message : 'issuer admin auth required',
+    }, { status: 401 });
   }
   try {
     const { requestId } = await params;

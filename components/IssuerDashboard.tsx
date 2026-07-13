@@ -5,6 +5,17 @@ import { LoginPanel } from './LoginPanel';
 
 type RequestItem = { requestId: string; scopedUserId?: string; userId?: string; requestType: string; status: string; createdAt?: string; attestationHash?: string };
 type AttestationItem = { attestationHash: string; requestType?: string; status: string; userId?: string; scopedUserId?: string; issuedAt?: string };
+type ApiPayload = { success?: boolean; message?: string; errorCode?: string; authenticated?: boolean; scopedUserId?: string; requests?: RequestItem[]; attestations?: AttestationItem[] };
+
+const issuerErrorMessage = (payload: ApiPayload, fallback: string) => {
+  if (payload.errorCode === 'issuer_key_not_registered') {
+    return 'No active issuer key is registered for this attestation type. Create or rotate its issuer keys in the U-net domain dashboard, then update UNET_ISSUER_SIGNERS_JSON with that exact key set.';
+  }
+  if (payload.errorCode === 'credential_issuer_key_mismatch') {
+    return 'The credential signing key does not match the active key for this attestation type. Update UNET_ISSUER_SIGNERS_JSON with the latest exported key set.';
+  }
+  return payload.errorCode ? `${payload.errorCode}: ${payload.message || fallback}` : (payload.message || fallback);
+};
 
 export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'attestations' }) {
   const [scopedUserId, setScopedUserId] = useState('');
@@ -27,12 +38,17 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
     setStatus('');
   }, []);
 
-  const parseJson = async (response: Response) => response.json().catch(() => ({ success: false, message: 'Could not read server response.' }));
+  const parseJson = async (response: Response): Promise<ApiPayload> => response.json().catch(() => ({ success: false, message: 'Could not read server response.' }));
 
   const authFetch = useCallback(async (url: string, init: RequestInit = {}) => {
     const response = await fetch(url, { ...init, credentials: 'same-origin' });
     const payload = await parseJson(response);
-    if (response.status === 401) {
+    const sessionFailure = response.status === 401 && (
+      payload.errorCode === 'issuer_admin_session_required' ||
+      payload.message === 'assertionJws is required' ||
+      payload.message === 'issuer_admin_not_authorized'
+    );
+    if (sessionFailure) {
       clearLogin('Your session expired. Sign in again.');
       throw new Error('session_expired');
     }
@@ -100,7 +116,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ decision, reason: decision === 'deny' ? 'Denied by issuer' : undefined }),
       });
-      setStatus(response.ok ? 'Updated.' : (payload.message || 'Decision failed'));
+      setStatus(response.ok ? 'Updated.' : issuerErrorMessage(payload, 'Decision failed'));
       await load();
     } catch (error) {
       if (error instanceof Error && error.message === 'session_expired') return;
@@ -116,7 +132,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ reason: 'Revoked from issuer example dashboard' }),
       });
-      setStatus(response.ok ? 'Revoked.' : (payload.message || 'Revoke failed'));
+      setStatus(response.ok ? 'Revoked.' : issuerErrorMessage(payload, 'Revoke failed'));
       await load();
     } catch (error) {
       if (error instanceof Error && error.message === 'session_expired') return;
