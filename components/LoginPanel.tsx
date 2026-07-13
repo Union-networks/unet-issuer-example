@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import { renderLoginQrPayload } from '@union-networks/web-login';
 
-type Props = { onLogin: (scopedUserId: string, assertionJws: string) => void };
+type Props = {
+  onLogin: (scopedUserId: string, assertionJws: string) => void;
+  purpose?: 'miniapp' | 'issuer-admin';
+};
 
-export function LoginPanel({ onLogin }: Props) {
+export function LoginPanel({ onLogin, purpose = 'miniapp' }: Props) {
   const [qr, setQr] = useState('');
   const [status, setStatus] = useState('Creating U-net QR...');
 
@@ -35,10 +38,20 @@ export function LoginPanel({ onLogin }: Props) {
           setStatus(`Login ${finalSession.status}`);
           return;
         }
-        const verified = await fetch('/api/login/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assertionJws: finalSession.assertionJws }) }).then((res) => res.json());
-        if (!verified.success) throw new Error(verified.message || 'login verification failed');
-        localStorage.setItem('unetIssuerExampleScopedUserId', finalSession.scopedUserId);
-        localStorage.setItem('unetIssuerExampleAssertion', finalSession.assertionJws);
+        const verifyResponse = await fetch('/api/login/verify', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ assertionJws: finalSession.assertionJws, purpose }),
+        });
+        const verified = await verifyResponse.json().catch(() => ({ success: false, message: 'Could not read login verification response.' }));
+        if (!verifyResponse.ok || !verified.success) throw new Error(verified.message || 'login verification failed');
+        if (purpose === 'issuer-admin') {
+          localStorage.setItem('unetIssuerAdminScopedUserId', finalSession.scopedUserId);
+        } else {
+          localStorage.setItem('unetIssuerExampleScopedUserId', finalSession.scopedUserId);
+          localStorage.setItem('unetIssuerExampleAssertion', finalSession.assertionJws);
+        }
         onLogin(finalSession.scopedUserId, finalSession.assertionJws);
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
@@ -49,7 +62,7 @@ export function LoginPanel({ onLogin }: Props) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [onLogin]);
+  }, [onLogin, purpose]);
 
   return (
     <div className="panel stack">

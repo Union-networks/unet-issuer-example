@@ -3,6 +3,7 @@ import { verifyLoginAssertion } from '@union-networks/server';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { isIssuerAdminScopedUserId, readIssuerAdminSession } from './issuer-admin-session';
 import { issuerBaseUrl, serviceId } from './config';
 
 export const providerToken = () => process.env.UNET_PROVIDER_API_KEY;
@@ -136,13 +137,9 @@ export function bearerAssertion(request: Request) {
 }
 
 export function requireIssuerAdmin(request: Request) {
-  const claims = verifyServiceAssertion(bearerAssertion(request));
-  const allowed = (process.env.UNET_ISSUER_ADMIN_SCOPED_IDS || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const session = readIssuerAdminSession(request);
+  const claims = session ?? verifyServiceAssertion(bearerAssertion(request));
   if (!claims.scopedUserId) throw new Error('issuer_admin_not_authorized');
-  if (!allowed.length) throw new Error('issuer_admin_allowlist_not_configured');
-  if (!allowed.includes(claims.scopedUserId)) throw new Error('issuer_admin_not_authorized');
+  if (!isIssuerAdminScopedUserId(claims.scopedUserId)) throw new Error('issuer_admin_not_authorized');
   return claims;
 }

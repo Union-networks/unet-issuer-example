@@ -8,68 +8,55 @@ type AttestationItem = { attestationHash: string; requestType?: string; status: 
 
 export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'attestations' }) {
   const [scopedUserId, setScopedUserId] = useState('');
-  const [assertionJws, setAssertionJws] = useState('');
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [attestations, setAttestations] = useState<AttestationItem[]>([]);
   const [status, setStatus] = useState('');
   const [checkingSession, setCheckingSession] = useState(true);
 
   const clearLogin = useCallback((message = '') => {
-    localStorage.removeItem('unetIssuerExampleScopedUserId');
-    localStorage.removeItem('unetIssuerExampleAssertion');
+    localStorage.removeItem('unetIssuerAdminScopedUserId');
     setScopedUserId('');
-    setAssertionJws('');
     setRequests([]);
     setAttestations([]);
     setStatus(message);
   }, []);
 
-  const completeLogin = useCallback((scoped: string, assertion: string) => {
-    localStorage.setItem('unetIssuerExampleScopedUserId', scoped);
-    localStorage.setItem('unetIssuerExampleAssertion', assertion);
+  const completeLogin = useCallback((scoped: string) => {
+    localStorage.setItem('unetIssuerAdminScopedUserId', scoped);
     setScopedUserId(scoped);
-    setAssertionJws(assertion);
     setStatus('');
   }, []);
 
   const parseJson = async (response: Response) => response.json().catch(() => ({ success: false, message: 'Could not read server response.' }));
 
   const authFetch = useCallback(async (url: string, init: RequestInit = {}) => {
-    const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${assertionJws}`);
-    const response = await fetch(url, { ...init, headers });
+    const response = await fetch(url, { ...init, credentials: 'same-origin' });
     const payload = await parseJson(response);
-    const message = typeof payload?.message === 'string' ? payload.message : '';
-    if (response.status === 401 || message.includes('expired') || message.includes('invalid')) {
+    if (response.status === 401) {
       clearLogin('Your session expired. Sign in again.');
       throw new Error('session_expired');
     }
     return { response, payload };
-  }, [assertionJws, clearLogin]);
+  }, [clearLogin]);
 
   useEffect(() => {
     let cancelled = false;
-    const storedScopedUserId = localStorage.getItem('unetIssuerExampleScopedUserId') || '';
-    const storedAssertionJws = localStorage.getItem('unetIssuerExampleAssertion') || '';
-    if (!storedScopedUserId || !storedAssertionJws) {
-      setCheckingSession(false);
-      return;
-    }
+    const storedScopedUserId = localStorage.getItem('unetIssuerAdminScopedUserId') || '';
     setStatus('Checking session...');
     fetch('/api/login/verify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ assertionJws: storedAssertionJws }),
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
     })
       .then(async (response) => ({ response, payload: await parseJson(response) }))
       .then(({ response, payload }) => {
         if (cancelled) return;
-        if (!response.ok || payload.success === false || payload.scopedUserId !== storedScopedUserId) {
-          clearLogin('Your session expired. Sign in again.');
+        if (!response.ok || payload.success === false || !payload.authenticated || !payload.scopedUserId) {
+          clearLogin(storedScopedUserId ? 'Your session expired. Sign in again.' : '');
           return;
         }
-        setScopedUserId(storedScopedUserId);
-        setAssertionJws(storedAssertionJws);
+        localStorage.setItem('unetIssuerAdminScopedUserId', payload.scopedUserId);
+        setScopedUserId(payload.scopedUserId);
         setStatus('');
       })
       .catch(() => {
@@ -82,7 +69,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
   }, [clearLogin]);
 
   const load = useCallback(async () => {
-    if (!assertionJws) return;
+    if (!scopedUserId) return;
     try {
       const [req, att] = await Promise.all([
         authFetch('/api/issuer/requests?status=pending'),
@@ -96,9 +83,14 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
       if (error instanceof Error && error.message === 'session_expired') return;
       setStatus(error instanceof Error ? error.message : 'Could not load issuer dashboard.');
     }
-  }, [assertionJws, authFetch]);
+  }, [scopedUserId, authFetch]);
 
-  useEffect(() => { if (scopedUserId && assertionJws) void load(); }, [scopedUserId, assertionJws, load]);
+  useEffect(() => { if (scopedUserId) void load(); }, [scopedUserId, load]);
+
+  async function signOut() {
+    await fetch('/api/login/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined);
+    clearLogin('Signed out.');
+  }
 
   async function decide(requestId: string, decision: 'approve' | 'deny') {
     setStatus(`${decision}...`);
@@ -133,7 +125,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
   }
 
   if (checkingSession) return <div className="panel"><p>Checking issuer session...</p></div>;
-  if (!scopedUserId || !assertionJws) return <LoginPanel onLogin={completeLogin} />;
+  if (!scopedUserId) return <LoginPanel purpose="issuer-admin" onLogin={completeLogin} />;
 
   return (
     <div className="stack">
@@ -145,7 +137,7 @@ export function IssuerDashboard({ initialTab }: { initialTab: 'requests' | 'atte
         </div>
         <div className="row">
           <button className="secondary" onClick={load}>Refresh</button>
-          <button className="secondary" onClick={() => clearLogin('Signed out.')}>Sign out</button>
+          <button className="secondary" onClick={() => void signOut()}>Sign out</button>
         </div>
       </div>
       <div className="grid">
