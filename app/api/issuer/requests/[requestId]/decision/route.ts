@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { approveAttestationRequest, denyAttestationRequest, listAttestationRequests } from '@union-networks/issuer';
-import { issuerOptions, issuerSigner, providerToken, requireIssuerAdmin } from '@/lib/issuer-server';
+import { configureCredentialRuntime, issuerOptions, issuerSigner, providerToken, requireIssuerAdmin } from '@/lib/issuer-server';
 import { serviceId, verifierBaseUrl } from '@/lib/config';
 
 export async function POST(request: Request, { params }: { params: Promise<{ requestId: string }> }) {
@@ -32,6 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ req
       ? Number(predicateParams.lowerBound ?? 18) + 3
       : predicateParams.expectedValue ?? body.claims?.[claimPath];
     const credentialClaims = body.claims && Object.keys(body.claims).length ? body.claims : { [claimPath]: generatedClaimValue };
+    if (body.decision === 'approve') configureCredentialRuntime();
     const result = body.decision === 'deny'
       ? await denyAttestationRequest({ serviceId, requestId, reason: body.reason, signer, providerToken: providerToken() }, issuerOptions())
       : await approveAttestationRequest({

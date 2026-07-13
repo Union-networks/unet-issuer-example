@@ -1,10 +1,19 @@
 import { createIssuerSignerFromEnv } from '@union-networks/issuer';
 import { verifyLoginAssertion } from '@union-networks/server';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { issuerBaseUrl, serviceId } from './config';
 
 export const providerToken = () => process.env.UNET_PROVIDER_API_KEY;
 export const issuerOptions = () => ({ issuerBaseUrl });
+export const configureCredentialRuntime = () => {
+  if (process.env.BB_WASM_PATH?.trim()) return process.env.BB_WASM_PATH.trim();
+  const wasmPath = join(process.cwd(), 'server-assets', 'barretenberg-threads.wasm.gz');
+  if (!existsSync(wasmPath)) throw new Error('issuer_credential_runtime_wasm_missing');
+  process.env.BB_WASM_PATH = wasmPath;
+  return wasmPath;
+};
 const decodeEnvString = (value: string) => {
   let next = value.trim();
   for (let i = 0; i < 2; i += 1) {
