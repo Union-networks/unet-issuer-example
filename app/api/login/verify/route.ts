@@ -17,11 +17,13 @@ export async function GET(request: Request) {
   } catch {
     authenticated = false;
   }
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
     authenticated,
     ...(authenticated && session ? { scopedUserId: session.scopedUserId, expiresAt: session.expiresAt } : {}),
   });
+  response.headers.set('cache-control', 'private, no-store');
+  return response;
 }
 
 export async function POST(request: Request) {
