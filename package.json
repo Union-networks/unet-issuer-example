@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@union-networks/issuer": "0.2.0-alpha.8",
+    "@union-networks/issuer": "0.2.0-alpha.9",
     "@union-networks/react": "0.2.0-alpha.7",
     "@union-networks/server": "0.2.0-alpha.7",
     "@union-networks/web-login": "0.2.0-alpha.7",
