@@ -124,6 +124,29 @@ export const issuerSigner = (requestType?: string) => {
   };
 };
 
+export const domainAdminSigner = () => {
+  const issuerId = process.env.UNET_DOMAIN_ADMIN_ISSUER_ID;
+  const keyId = process.env.UNET_DOMAIN_ADMIN_KEY_ID;
+  const privateKeyPem = process.env.UNET_DOMAIN_ADMIN_PRIVATE_KEY_PEM;
+  const publicKeyPem = process.env.UNET_DOMAIN_ADMIN_PUBLIC_KEY_PEM;
+  const credentialKeyId = process.env.UNET_DOMAIN_ADMIN_CREDENTIAL_KEY_ID;
+  const credentialPrivateKeyPem = process.env.UNET_DOMAIN_ADMIN_CREDENTIAL_PRIVATE_KEY_PEM;
+  const credentialPublicKeyPem = process.env.UNET_DOMAIN_ADMIN_CREDENTIAL_PUBLIC_KEY_PEM;
+  if (!issuerId || !keyId || !privateKeyPem || !credentialKeyId || !credentialPrivateKeyPem) {
+    throw new Error('domain_admin_signer_environment_missing');
+  }
+  return {
+    issuerId,
+    keyId,
+    privateKeyPem: normalizePrivateKeyPem(privateKeyPem),
+    ...(publicKeyPem ? { publicKeyPem: normalizePublicKeyPem(publicKeyPem) } : {}),
+    credentialKeyId,
+    credentialPrivateKeyPem: normalizeCredentialPrivateKeyPem(credentialPrivateKeyPem),
+    ...(credentialPublicKeyPem ? { credentialPublicKeyPem: normalizePublicKeyPem(credentialPublicKeyPem) } : {}),
+    credentialSignatureScheme: 'ecdsa_secp256k1_compact_low_s' as const,
+  };
+};
+
 export function verifyServiceAssertion(assertionJws?: string) {
   const secret = process.env.UNET_WEB_LOGIN_ASSERTION_SECRET;
   if (!secret) throw new Error('UNET_WEB_LOGIN_ASSERTION_SECRET is not configured');
