@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createCredentialEnvelopeV2, encryptCredentialEnvelopeV2 } from '@union-networks/issuer';
 import { configureCredentialRuntime, domainAdminSigner } from '@/lib/issuer-server';
-import { serviceId } from '@/lib/config';
+import { appOrigin, serviceId } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +32,7 @@ const canonicalJson = (value: unknown): string => {
 export async function POST(request: Request) {
   try {
     const body = await request.json() as CallbackRequest;
-    const configuredOrigin = (process.env.NEXT_PUBLIC_SITE_URL ?? request.headers.get('origin') ?? '').replace(/\/+$/, '');
+    const configuredOrigin = appOrigin;
     const challengeHeader = request.headers.get('x-unet-domain-admin-challenge') ?? '';
     if (body.version !== 1 || body.action !== 'domain-admin.issue') throw new Error('domain_admin_callback_action_invalid');
     if (body.serviceId !== serviceId || body.origin !== configuredOrigin) throw new Error('domain_admin_callback_service_mismatch');
